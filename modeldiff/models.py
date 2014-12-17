@@ -1,4 +1,5 @@
 from django.contrib.gis.db import models
+from django.db import models as models_non_contrib
 from django.contrib.gis.utils.wkt import precision_wkt
 
 import json
@@ -66,8 +67,18 @@ class SaveModeldiffMixin(models.Model):
             new_values = {}
             for k in fields:
                 old_value = getattr(original, k)
-                old_values[k] = old_value
-                new_value = getattr(self, k)
+                new_value = getattr(self, k)               
+                
+                field_conf = self._meta.get_field_by_name(k)
+                if isinstance(field_conf[0], models_non_contrib.fields.related.ForeignKey):
+                    if len(field_conf[0].to_fields)>0:
+                        old_value = getattr(old_value, field_conf[0].to_fields[0])
+                        new_value = getattr(new_value, field_conf[0].to_fields[0])
+                    else:
+                        old_value =  old_value.pk
+                        new_value =  new_value.pk
+                
+                old_values[k] = old_value               
                 if not new_value == old_value:
                     new_values[k] = new_value
 
@@ -78,8 +89,18 @@ class SaveModeldiffMixin(models.Model):
             diff.action = 'add'
             # save all new values
             new_values = {}
-            for f in fields:
-                new_values[f] = getattr(self, f)
+            for k in fields:
+                new_value = getattr(self, k)
+                                               
+                field_conf = self._meta.get_field_by_name(k)
+                if isinstance(field_conf[0], models_non_contrib.fields.related.ForeignKey):
+                    if len(field_conf[0].to_fields)>0:
+                        new_value = getattr(new_value, field_conf[0].to_fields[0])
+                    else:
+                        new_value =  new_value.pk
+                
+                new_values[k] = new_value
+                
             diff.new_data = json.dumps(new_values)
             diff.save()
 
@@ -128,8 +149,18 @@ class SaveGeomodeldiffMixin(models.Model):
             new_values = {}
             for k in fields:
                 old_value = getattr(original, k)
-                old_values[k] = old_value
                 new_value = getattr(self, k)
+                                
+                field_conf = self._meta.get_field_by_name(k)
+                if isinstance(field_conf[0], models_non_contrib.fields.related.ForeignKey):
+                    if len(field_conf[0].to_fields)>0:
+                        old_value = getattr(old_value, field_conf[0].to_fields[0])
+                        new_value = getattr(new_value, field_conf[0].to_fields[0])
+                    else:
+                        old_value =  old_value.pk
+                        new_value =  new_value.pk
+                        
+                old_values[k] = old_value
                 if not new_value == old_value:
                     new_values[k] = new_value
 
@@ -150,7 +181,9 @@ class SaveGeomodeldiffMixin(models.Model):
 
             if not new_geom_value == old_values[geom_field]:
                 new_values[geom_field] = new_geom_value
-
+            
+            print old_values
+            
             diff.old_data = json.dumps(old_values)
             diff.new_data = json.dumps(new_values)
             diff.save()
@@ -158,8 +191,20 @@ class SaveGeomodeldiffMixin(models.Model):
             diff.action = 'add'
             # save all new values
             new_values = {}
-            for f in fields:
-                new_values[f] = getattr(self, f)
+            for k in fields:
+                
+                new_value = getattr(self, k)
+                                               
+                field_conf = self._meta.get_field_by_name(k)
+                if isinstance(field_conf[0], models_non_contrib.fields.related.ForeignKey):
+                    if len(field_conf[0].to_fields)>0:
+                        new_value = getattr(new_value, field_conf[0].to_fields[0])
+                    else:
+                        new_value =  new_value.pk
+                
+                new_values[k] = new_value
+                        
+                
             new_geom = getattr(self, geom_field)
             diff.the_geom = new_geom
             if new_geom:
