@@ -1,5 +1,5 @@
-from django.contrib.gis.db import models
-from django.db import models as models_non_contrib
+from django.contrib.gis.db import models as gismodels
+from django.db import models as models
 from django.contrib.gis.utils.wkt import precision_wkt
 
 import json
@@ -9,16 +9,16 @@ class ModeldiffMixin(models.Model):
     """
     Base model to save the changes to a model
     """
-    date_created = models.DateTimeField(auto_now_add=True)
-    key = models.CharField(max_length=20, blank=True, null=True)
-    key_id = models.IntegerField(blank=True, null=True)
-    username = models.CharField(max_length=50)
-    model_name = models.CharField(max_length=50)
-    model_id = models.IntegerField(blank=True, null=True)
-    action = models.CharField(max_length=6)
-    old_data = models.TextField()
-    new_data = models.TextField()
-    applied = models.BooleanField(default=False)
+    date_created = gismodels.DateTimeField(auto_now_add=True)
+    key = gismodels.CharField(max_length=20, blank=True, null=True)
+    key_id = gismodels.IntegerField(blank=True, null=True)
+    username = gismodels.CharField(max_length=50)
+    model_name = gismodels.CharField(max_length=50)
+    model_id = gismodels.IntegerField(blank=True, null=True)
+    action = gismodels.CharField(max_length=6)
+    old_data = gismodels.TextField()
+    new_data = gismodels.TextField()
+    applied = gismodels.BooleanField(default=False)
 
     class Meta:
         abstract = True
@@ -29,8 +29,8 @@ class Modeldiff(ModeldiffMixin, models.Model):
 
 
 class Geomodeldiff(ModeldiffMixin, models.Model):
-    the_geom = models.GeometryField(srid=4326, null=True, blank=True)
-    objects = models.GeoManager()
+    the_geom = gismodels.GeometryField(srid=4326, null=True, blank=True)
+    objects = gismodels.GeoManager()
 
 
 class SaveModeldiffMixin(models.Model):
@@ -70,7 +70,7 @@ class SaveModeldiffMixin(models.Model):
                 new_value = getattr(self, k)               
                 
                 field_conf = self._meta.get_field_by_name(k)
-                if isinstance(field_conf[0], models_non_contrib.fields.related.ForeignKey):
+                if isinstance(field_conf[0], models.fields.related.ForeignKey):
                     if len(field_conf[0].to_fields)>0:
                         old_value = getattr(old_value, field_conf[0].to_fields[0])
                         new_value = getattr(new_value, field_conf[0].to_fields[0])
@@ -93,7 +93,7 @@ class SaveModeldiffMixin(models.Model):
                 new_value = getattr(self, k)
                                                
                 field_conf = self._meta.get_field_by_name(k)
-                if isinstance(field_conf[0], models_non_contrib.fields.related.ForeignKey):
+                if isinstance(field_conf[0], models.fields.related.ForeignKey):
                     if len(field_conf[0].to_fields)>0:
                         new_value = getattr(new_value, field_conf[0].to_fields[0])
                     else:
@@ -109,6 +109,49 @@ class SaveModeldiffMixin(models.Model):
             diff.model_id = self.pk
             diff.save()
 
+    def delete(self, *args, **kwargs):
+        real = kwargs.get('real', False)
+
+        if real:
+            # call original handler
+            kwargs.pop('real')
+            super(SaveModeldiffMixin, self).delete(*args, **kwargs)
+            return
+
+        fields = self.Modeldiff.fields
+
+
+        diff = Modeldiff()
+        diff.model_name = self.Modeldiff.model_name
+        if hasattr(self, 'username'):
+            diff.username = self.username
+
+        if self.pk:
+            diff.model_id = self.pk
+            diff.action = 'delete'
+            # get original object in database
+            original = self.__class__.objects.get(pk=self.pk)
+
+            # save old values
+            old_values = {}
+            for k in fields:
+                old_value = getattr(original, k)
+                
+                field_conf = original._meta.get_field_by_name(k)
+                if isinstance(field_conf[0], models.fields.related.ForeignKey):
+                    if len(field_conf[0].to_fields)>0:
+                        old_value = getattr(old_value, field_conf[0].to_fields[0])
+                    else:
+                        old_value =  old_values.pk
+                
+                old_values[k] = old_value                
+                
+
+            diff.old_data = json.dumps(old_values)
+            diff.save()
+
+        super(SaveModeldiffMixin, self).delete(*args, **kwargs)
+        
     class Meta:
         abstract = True
 
@@ -152,7 +195,7 @@ class SaveGeomodeldiffMixin(models.Model):
                 new_value = getattr(self, k)
                                 
                 field_conf = self._meta.get_field_by_name(k)
-                if isinstance(field_conf[0], models_non_contrib.fields.related.ForeignKey):
+                if isinstance(field_conf[0], models.fields.related.ForeignKey):
                     if len(field_conf[0].to_fields)>0:
                         old_value = getattr(old_value, field_conf[0].to_fields[0])
                         new_value = getattr(new_value, field_conf[0].to_fields[0])
@@ -194,7 +237,7 @@ class SaveGeomodeldiffMixin(models.Model):
                 new_value = getattr(self, k)
                                                
                 field_conf = self._meta.get_field_by_name(k)
-                if isinstance(field_conf[0], models_non_contrib.fields.related.ForeignKey):
+                if isinstance(field_conf[0], models.fields.related.ForeignKey):
                     if len(field_conf[0].to_fields)>0:
                         new_value = getattr(new_value, field_conf[0].to_fields[0])
                     else:
@@ -243,7 +286,15 @@ class SaveGeomodeldiffMixin(models.Model):
             # save old values
             old_values = {}
             for k in fields:
-                old_value = getattr(self, k)
+                old_value = getattr(original, k)
+                
+                field_conf = original._meta.get_field_by_name(k)
+                if isinstance(field_conf[0], models.fields.related.ForeignKey):
+                    if len(field_conf[0].to_fields)>0:
+                        old_value = getattr(old_value, field_conf[0].to_fields[0])
+                    else:
+                        old_value =  old_values.pk
+                
                 old_values[k] = old_value
 
             # save geometry
