@@ -4,7 +4,8 @@ from django.contrib.gis.utils.wkt import precision_wkt
 import json
 
 from test_models import PersonModel, PersonGeoModel
-from test_models import TypeModel, ModelModel, SensorModel, SensorGeoModel
+from test_models import TypeModel, ModelModel, SensorModel, SensorGeoModel, \
+SensorObservationModel, SensorObservationGeoModel
 from models import Modeldiff, Geomodeldiff
 
 
@@ -79,7 +80,7 @@ class ModeldiffTests(TestCase):
         self.assertEqual(diff.model_id, 1)
         self.assertEqual(diff.model_name, 'modeldiff.SensorGeoModel')
         self.assertEqual(diff.old_data, '')
-          
+           
         self.assertEqual(json.loads(diff.new_data),
                          {u'model_code': u'123ABC', u'type': 1,
                           'the_geom': 'POINT(0.00000000 0.00000000)'})
@@ -118,12 +119,12 @@ class ModeldiffTests(TestCase):
         sensor.type = TypeModel.objects.create(name='BBB')                
         sensor.model_code = ModelModel.objects.create(code="456ABC", name='Arduino2')
         sensor.save()
-          
+           
         diff = Modeldiff.objects.latest('id')         
-          
+           
         self.assertEqual(diff.action, 'update')
         self.assertEqual(diff.model_id, 1)
-          
+           
         self.assertEqual(json.loads(diff.old_data),
                          {u'model_code': u'123ABC', u'type': 1})
         self.assertEqual(json.loads(diff.new_data),
@@ -163,12 +164,12 @@ class ModeldiffTests(TestCase):
         sensor.type = TypeModel.objects.create(name='BBB')                
         sensor.model_code = ModelModel.objects.create(code="456ABC", name='Arduino2')
         sensor.save()
-  
+   
         diff = Geomodeldiff.objects.latest('id')
-         
+          
         self.assertEqual(diff.action, 'update')
         self.assertEqual(diff.model_id, 1)
- 
+  
         self.assertEqual(json.loads(diff.old_data),
                          {u'model_code': u'123ABC', u'type': 1,
                           u'the_geom': u'POINT(0.00000000 0.00000000)'
@@ -177,6 +178,43 @@ class ModeldiffTests(TestCase):
                          {u'model_code': u'456ABC', u'type': 2
                           })
 
+    def test_update_parent_field_model(self):
+          
+        sensor = SensorModel.objects.get(pk=1)
+        self.assertEqual(sensor.pk, 1)
+  
+        sensor_observation = SensorObservationModel.objects.create(sensor=sensor, value=11)
+    
+        diffs = Modeldiff.objects.all().order_by('-id')[:2]
+         
+        self.assertEqual(diffs[0].action, 'update')
+        self.assertEqual(diffs[0].model_name, 'modeldiff.SensorModel')
+        self.assertEqual(diffs[0].model_id, sensor_observation.sensor.pk)
+      
+        self.assertEqual(diffs[1].action, 'add')
+        self.assertEqual(diffs[1].model_name, 'modeldiff.SensorObservationModel')
+        self.assertEqual(diffs[1].model_id, sensor_observation.pk)
+             
+
+    def test_update_parent_field_geo_model(self):
+         
+        sensor = SensorGeoModel.objects.get(pk=1)
+        self.assertEqual(sensor.pk, 1)
+ 
+        sensor_observation = SensorObservationGeoModel.objects.create(sensor=sensor, value=16)
+   
+        diff = Geomodeldiff.objects.latest('id')
+        
+        self.assertEqual(diff.action, 'update')
+        self.assertEqual(diff.model_name, 'modeldiff.SensorGeoModel')
+        self.assertEqual(diff.model_id, sensor_observation.sensor.pk)
+     
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_name, 'modeldiff.SensorObservationGeoModel')
+        self.assertEqual(diff.model_id, sensor_observation.pk)
+               
+        
     def test_delete_model(self):
         person = PersonModel.objects.get(pk=1)
         self.assertEqual(person.pk, 1)
@@ -206,7 +244,7 @@ class ModeldiffTests(TestCase):
         sensor = SensorModel.objects.get(pk=1)
         self.assertEqual(sensor.pk, 1)
         sensor.delete()
-  
+   
         diff = Modeldiff.objects.latest('id')
         self.assertEqual(diff.action, 'delete')
         self.assertEqual(diff.model_id, 1)
@@ -214,12 +252,12 @@ class ModeldiffTests(TestCase):
                          {u'model_code': u'123ABC', u'type': 1
                           })
         self.assertEqual(diff.new_data, '')
-        
+         
     def test_delete_geo_model_foreignkey(self):
         sensor = SensorGeoModel.objects.get(pk=1)
         self.assertEqual(sensor.pk, 1)
         sensor.delete()
-    
+     
         diff = Geomodeldiff.objects.latest('id')
         self.assertEqual(diff.action, 'delete')
         self.assertEqual(diff.model_id, 1)

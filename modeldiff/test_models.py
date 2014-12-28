@@ -2,7 +2,7 @@ from django.contrib.gis.db import models
 
 from models import SaveGeomodeldiffMixin, SaveModeldiffMixin
 
-class PersonModel(SaveGeomodeldiffMixin, models.Model):
+class PersonModel(SaveModeldiffMixin, models.Model):
     name = models.CharField(max_length=50, null=True, blank=True)
     surname = models.CharField(max_length=50, null=True, blank=True)
 
@@ -62,4 +62,25 @@ class SensorGeoModel(SaveGeomodeldiffMixin, models.Model):
         fields = ('model_code', 'type')
         geom_field = 'the_geom'
         geom_precision = 8
+
+
+class SensorObservationModel(SaveModeldiffMixin, models.Model):
+    sensor = models.ForeignKey(SensorModel)
+    value = models.IntegerField()
+    
+    class Modeldiff:
+        model_name = 'modeldiff.SensorObservationModel'
+        fields = ('sensor', 'value')
+        parent_field = 'sensor'
+
+
+class SensorObservationGeoModel(SaveModeldiffMixin, models.Model):
+    sensor = models.ForeignKey(SensorGeoModel)
+    value = models.IntegerField()
+    
+    class Modeldiff:
+        model_name = 'modeldiff.SensorObservationGeoModel'
+        fields = ('sensor', 'value')
+        parent_field = 'sensor'
+            
 

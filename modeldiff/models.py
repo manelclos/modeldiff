@@ -109,6 +109,9 @@ class SaveModeldiffMixin(models.Model):
             diff.model_id = self.pk
             diff.save()
 
+        if hasattr(self.Modeldiff, 'parent_field'):
+            getattr(self, self.Modeldiff.parent_field).save()      
+        
     def delete(self, *args, **kwargs):
         real = kwargs.get('real', False)
 
@@ -259,6 +262,9 @@ class SaveGeomodeldiffMixin(models.Model):
             diff.model_id = self.pk
             diff.save()
 
+        if hasattr(self.Modeldiff, 'parent_field'):
+            getattr(self, self.Modeldiff.parent_field).save()
+            
     def delete(self, *args, **kwargs):
         real = kwargs.get('real', False)
 
