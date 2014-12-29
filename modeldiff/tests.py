@@ -59,7 +59,22 @@ class ModeldiffTests(TestCase):
           
         self.assertEqual(json.loads(diff.new_data),
                          {u'model_code': u'123ABC', u'type': 1})
-  
+
+    def test_creation_foreignkey_not_existent_diff_exists(self):
+        type = TypeModel.objects.create(name='AAA')
+        data_dict = {'code':'0', 'name':'Arduino2'}
+        model = ModelModel(**data_dict)
+        sensor = SensorModel.objects.create(model_code=model, type=type)
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, sensor.pk)
+
+    def test_creation_foreignkey_none_diff_exists(self):
+        sensor = SensorModel.objects.create(model_code=None, type=None)
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, sensor.pk)        
+          
     def test_creation_geo_diff_exists(self):
         diff = Geomodeldiff.objects.get(pk=1)
         self.assertEqual(diff.id, 1)
@@ -87,7 +102,23 @@ class ModeldiffTests(TestCase):
         self.assertEqual(precision_wkt(diff.the_geom, 8),
                          'POINT(0.00000000 0.00000000)')    
          
- 
+    def test_creation_geo_foreignkey_not_existent_diff_exists(self):
+        type = TypeModel.objects.create(name='AAA')
+        data_dict = {'code':'0', 'name':'Arduino2'}
+        model = ModelModel(**data_dict)
+        sensor = SensorGeoModel.objects.create(model_code=model, type=type,
+                                   the_geom='POINT (0 0)')
+        diff = Geomodeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, sensor.pk)
+
+    def test_creation_geo_foreignkey_none_diff_exists(self):
+        sensor = SensorGeoModel.objects.create(model_code=None, type=None,
+                                           the_geom='POINT (0 0)')
+        diff = Geomodeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, sensor.pk)
+                
     def test_modify_model(self):
         person = PersonModel.objects.get(pk=1)
         self.assertEqual(person.pk, 1)

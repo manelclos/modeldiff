@@ -66,18 +66,34 @@ class SaveModeldiffMixin(models.Model):
             old_values = {}
             new_values = {}
             for k in fields:
-                old_value = getattr(original, k)
-                new_value = getattr(self, k)               
-                
+            
+                try:
+                    old_value = getattr(original, k)
+                except:
+                    old_value = None
+
+                try:
+                    new_value = getattr(self, k)
+                except:
+                    new_value = None
+                                    
                 field_conf = self._meta.get_field_by_name(k)
                 if isinstance(field_conf[0], models.fields.related.ForeignKey):
                     if len(field_conf[0].to_fields)>0:
-                        old_value = getattr(old_value, field_conf[0].to_fields[0])
-                        new_value = getattr(new_value, field_conf[0].to_fields[0])
+                        if old_value is not None:
+                            old_value = getattr(old_value, field_conf[0].to_fields[0])
+                        if new_value is not None:
+                            new_value = getattr(new_value, field_conf[0].to_fields[0])
                     else:
-                        old_value =  old_value.pk
-                        new_value =  new_value.pk
-                
+                        if old_value is not None:
+                            old_value =  old_value.pk
+                        if new_value is not None:
+                            new_value =  new_value.pk
+                        
+                elif isinstance(field_conf[0], models.fields.DateField) and old_value is not None:
+                    old_value = old_value.strftime("%Y-%m-%d")
+
+                                    
                 old_values[k] = old_value               
                 if not new_value == old_value:
                     new_values[k] = new_value
@@ -91,13 +107,13 @@ class SaveModeldiffMixin(models.Model):
             new_values = {}
             for k in fields:
                 new_value = getattr(self, k)
-                                               
-                field_conf = self._meta.get_field_by_name(k)
-                if isinstance(field_conf[0], models.fields.related.ForeignKey):
-                    if len(field_conf[0].to_fields)>0:
-                        new_value = getattr(new_value, field_conf[0].to_fields[0])
-                    else:
-                        new_value =  new_value.pk
+                if new_value is not None:                               
+                    field_conf = self._meta.get_field_by_name(k)
+                    if isinstance(field_conf[0], models.fields.related.ForeignKey):
+                        if len(field_conf[0].to_fields)>0:
+                            new_value = getattr(new_value, field_conf[0].to_fields[0])
+                        else:
+                            new_value =  new_value.pk
                 
                 new_values[k] = new_value
                 
@@ -189,24 +205,45 @@ class SaveGeomodeldiffMixin(models.Model):
             diff.action = 'update'
             # get original object in database
             original = self.__class__.objects.get(pk=self.pk)
-
+            
             # compare original and current (self)
             old_values = {}
             new_values = {}
             for k in fields:
-                old_value = getattr(original, k)
-                new_value = getattr(self, k)
-                                
+
+                try:
+                    old_value = getattr(original, k)
+                except:
+                    old_value = None
+
+                try:
+                    new_value = getattr(self, k)
+                except:
+                    new_value = None
+          
                 field_conf = self._meta.get_field_by_name(k)
                 if isinstance(field_conf[0], models.fields.related.ForeignKey):
                     if len(field_conf[0].to_fields)>0:
-                        old_value = getattr(old_value, field_conf[0].to_fields[0])
-                        new_value = getattr(new_value, field_conf[0].to_fields[0])
+                        if old_value is not None:
+                            old_value = getattr(old_value, field_conf[0].to_fields[0])
+                        if new_value is not None:
+                            new_value = getattr(new_value, field_conf[0].to_fields[0])
                     else:
-                        old_value =  old_value.pk
-                        new_value =  new_value.pk
+                        if old_value is not None:
+                            old_value =  old_value.pk
+                        if new_value is not None:
+                            new_value =  new_value.pk
                         
+                elif isinstance(field_conf[0], models.fields.DateField) and old_value is not None:
+                    old_value = old_value.strftime("%Y-%m-%d")
+                                        
                 old_values[k] = old_value
+                
+                #TODO: to revise
+                if isinstance(old_value, unicode):
+                    new_value = new_value.decode('utf-8')
+                #print type(new_value), type(old_value)
+                                    
                 if not new_value == old_value:
                     new_values[k] = new_value
 
@@ -227,7 +264,9 @@ class SaveGeomodeldiffMixin(models.Model):
 
             if not new_geom_value == old_values[geom_field]:
                 new_values[geom_field] = new_geom_value
-            
+            #print old_values
+            if hasattr(old_values, 'data_registre'): 
+                print old_values['data_registre']
             diff.old_data = json.dumps(old_values)
             diff.new_data = json.dumps(new_values)
             diff.save()
@@ -235,16 +274,15 @@ class SaveGeomodeldiffMixin(models.Model):
             diff.action = 'add'
             # save all new values
             new_values = {}
-            for k in fields:
-                
+            for k in fields:                
                 new_value = getattr(self, k)
-                                               
-                field_conf = self._meta.get_field_by_name(k)
-                if isinstance(field_conf[0], models.fields.related.ForeignKey):
-                    if len(field_conf[0].to_fields)>0:
-                        new_value = getattr(new_value, field_conf[0].to_fields[0])
-                    else:
-                        new_value =  new_value.pk
+                if new_value is not None:                                 
+                    field_conf = self._meta.get_field_by_name(k)
+                    if isinstance(field_conf[0], models.fields.related.ForeignKey):
+                        if len(field_conf[0].to_fields)>0:
+                            new_value = getattr(new_value, field_conf[0].to_fields[0])
+                        else:
+                            new_value =  new_value.pk
                 
                 new_values[k] = new_value
                         
