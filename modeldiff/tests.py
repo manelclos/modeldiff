@@ -3,16 +3,26 @@ from django.contrib.gis.utils.wkt import precision_wkt
 
 import json
 
-from test_models import PersonModel
-from models import Geomodeldiff
+from test_models import PersonModel, PersonGeoModel
+from test_models import TypeModel, ModelModel, SensorModel, SensorGeoModel, \
+SensorObservationModel, SensorObservationGeoModel
+from models import Modeldiff, Geomodeldiff
 
 
 class ModeldiffTests(TestCase):
 
     def setUp(self):
-        PersonModel.objects.create(name='Foo', surname='Doe',
+                               
+        PersonModel.objects.create(name='Foo', surname='Doe')
+        PersonGeoModel.objects.create(name='Foo', surname='Doe', 
                                    the_geom='POINT (0 0)')
-        diff = Geomodeldiff.objects.all()[0]
+        
+        type = TypeModel.objects.create(name='AAA')                
+        model = ModelModel.objects.create(code="123ABC", name='Arduino')
+        SensorModel.objects.create(model_code=model, type=type)
+        
+        SensorGeoModel.objects.create(model_code=model, type=type,
+                                   the_geom='POINT (0 0)')
 
     def print_diff(self, diff):
         import sys
@@ -24,71 +34,267 @@ class ModeldiffTests(TestCase):
         print >> sys.stderr, '  model_name:', diff.model_name
         print >> sys.stderr, '  old_data:', diff.old_data
         print >> sys.stderr, '  new_data:', diff.new_data
-        print >> sys.stderr, '  the_geom:', diff.the_geom
+        if hasattr(diff, 'the_geom'):
+            print >> sys.stderr, '  the_geom:', diff.the_geom
         print >> sys.stderr, '  ---------'
 
+
     def test_creation_diff_exists(self):
-        diff = Geomodeldiff.objects.all()[0]
+        diff = Modeldiff.objects.get(pk=1)
         self.assertEqual(diff.id, 1)
         self.assertEqual(diff.action, 'add')
         self.assertEqual(diff.model_id, 1)
         self.assertEqual(diff.model_name, 'modeldiff.PersonModel')
         self.assertEqual(diff.old_data, '')
         self.assertEqual(json.loads(diff.new_data),
+                         {'name': 'Foo', 'surname': 'Doe'})
+            
+    def test_creation_foreignkey_diff_exists(self):
+        diff = Modeldiff.objects.get(pk=2)
+        self.assertEqual(diff.id, 2)
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, 1)
+        self.assertEqual(diff.model_name, 'modeldiff.SensorModel')
+        self.assertEqual(diff.old_data, '')
+          
+        self.assertEqual(json.loads(diff.new_data),
+                         {u'model_code': u'123ABC', u'type': 1})
+
+    def test_creation_foreignkey_not_existent_diff_exists(self):
+        type = TypeModel.objects.create(name='AAA')
+        data_dict = {'code':'0', 'name':'Arduino2'}
+        model = ModelModel(**data_dict)
+        sensor = SensorModel.objects.create(model_code=model, type=type)
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, sensor.pk)
+
+    def test_creation_foreignkey_none_diff_exists(self):
+        sensor = SensorModel.objects.create(model_code=None, type=None)
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, sensor.pk)        
+          
+    def test_creation_geo_diff_exists(self):
+        diff = Geomodeldiff.objects.get(pk=1)
+        self.assertEqual(diff.id, 1)
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, 1)
+        self.assertEqual(diff.model_name, 'modeldiff.PersonGeoModel')
+        self.assertEqual(diff.old_data, '')
+        self.assertEqual(json.loads(diff.new_data),
                          {'name': 'Foo', 'surname': 'Doe',
                           'the_geom': 'POINT(0.00000000 0.00000000)'})
         self.assertEqual(precision_wkt(diff.the_geom, 8),
                          'POINT(0.00000000 0.00000000)')
+                
+    def test_creation_geo_foreignkey_diff_exists(self):
+        diff = Geomodeldiff.objects.get(pk=2)
+        self.assertEqual(diff.id, 2)
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, 1)
+        self.assertEqual(diff.model_name, 'modeldiff.SensorGeoModel')
+        self.assertEqual(diff.old_data, '')
+           
+        self.assertEqual(json.loads(diff.new_data),
+                         {u'model_code': u'123ABC', u'type': 1,
+                          'the_geom': 'POINT(0.00000000 0.00000000)'})
+        self.assertEqual(precision_wkt(diff.the_geom, 8),
+                         'POINT(0.00000000 0.00000000)')    
+         
+    def test_creation_geo_foreignkey_not_existent_diff_exists(self):
+        type = TypeModel.objects.create(name='AAA')
+        data_dict = {'code':'0', 'name':'Arduino2'}
+        model = ModelModel(**data_dict)
+        sensor = SensorGeoModel.objects.create(model_code=model, type=type,
+                                   the_geom='POINT (0 0)')
+        diff = Geomodeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, sensor.pk)
 
+    def test_creation_geo_foreignkey_none_diff_exists(self):
+        sensor = SensorGeoModel.objects.create(model_code=None, type=None,
+                                           the_geom='POINT (0 0)')
+        diff = Geomodeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_id, sensor.pk)
+                
     def test_modify_model(self):
         person = PersonModel.objects.get(pk=1)
         self.assertEqual(person.pk, 1)
+        
         person.name = 'Bar'
         person.save()
+  
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'update')
+        self.assertEqual(diff.model_id, 1)
+        self.assertEqual(json.loads(diff.old_data),
+                         {u'name': u'Foo', u'surname': u'Doe'})
+        self.assertEqual(json.loads(diff.new_data), {'name': 'Bar'})
+  
         person.name = 'John'
         person.save()
+        
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'update')
+        self.assertEqual(diff.model_id, 1)
+        self.assertEqual(json.loads(diff.old_data),
+                         {'name': 'Bar', 'surname': 'Doe'})
+        self.assertEqual(json.loads(diff.new_data), {'name': 'John'})
+ 
+ 
+    def test_modify_model_foreignkey(self):
+        sensor = SensorModel.objects.get(pk=1)
+        self.assertEqual(sensor.pk, 1)
+        sensor.type = TypeModel.objects.create(name='BBB')                
+        sensor.model_code = ModelModel.objects.create(code="456ABC", name='Arduino2')
+        sensor.save()
+           
+        diff = Modeldiff.objects.latest('id')         
+           
+        self.assertEqual(diff.action, 'update')
+        self.assertEqual(diff.model_id, 1)
+           
+        self.assertEqual(json.loads(diff.old_data),
+                         {u'model_code': u'123ABC', u'type': 1})
+        self.assertEqual(json.loads(diff.new_data),
+                         {u'model_code': u'456ABC', u'type': 2})
 
-        diff = Geomodeldiff.objects.get(pk=2)
+        
+    def test_modify_geo_model(self):
+        person = PersonGeoModel.objects.get(pk=1)
+        self.assertEqual(person.pk, 1)
+        
+        person.name = 'Bar'
+        person.save()
+
+  
+        diff = Geomodeldiff.objects.latest('id')
         self.assertEqual(diff.action, 'update')
         self.assertEqual(diff.model_id, 1)
         self.assertEqual(json.loads(diff.old_data),
                          {u'name': u'Foo', u'surname': u'Doe',
                           u'the_geom': u'POINT(0.00000000 0.00000000)'})
         self.assertEqual(json.loads(diff.new_data), {'name': 'Bar'})
-
-        diff = Geomodeldiff.objects.get(pk=3)
+  
+        person.name = 'John'
+        person.save()
+        
+        diff = Geomodeldiff.objects.latest('id')
         self.assertEqual(diff.action, 'update')
         self.assertEqual(diff.model_id, 1)
         self.assertEqual(json.loads(diff.old_data),
                          {'name': 'Bar', 'surname': 'Doe',
                           u'the_geom': u'POINT(0.00000000 0.00000000)'})
         self.assertEqual(json.loads(diff.new_data), {'name': 'John'})
+ 
+    def test_modify_geo_model_foreignkey(self):
+        sensor = SensorGeoModel.objects.get(pk=1)
+        self.assertEqual(sensor.pk, 1)
+        sensor.type = TypeModel.objects.create(name='BBB')                
+        sensor.model_code = ModelModel.objects.create(code="456ABC", name='Arduino2')
+        sensor.save()
+   
+        diff = Geomodeldiff.objects.latest('id')
+          
+        self.assertEqual(diff.action, 'update')
+        self.assertEqual(diff.model_id, 1)
+  
+        self.assertEqual(json.loads(diff.old_data),
+                         {u'model_code': u'123ABC', u'type': 1,
+                          u'the_geom': u'POINT(0.00000000 0.00000000)'
+                          })
+        self.assertEqual(json.loads(diff.new_data),
+                         {u'model_code': u'456ABC', u'type': 2
+                          })
 
+    def test_update_parent_field_model(self):
+          
+        sensor = SensorModel.objects.get(pk=1)
+        self.assertEqual(sensor.pk, 1)
+  
+        sensor_observation = SensorObservationModel.objects.create(sensor=sensor, value=11)
+    
+        diffs = Modeldiff.objects.all().order_by('-id')[:2]
+         
+        self.assertEqual(diffs[0].action, 'update')
+        self.assertEqual(diffs[0].model_name, 'modeldiff.SensorModel')
+        self.assertEqual(diffs[0].model_id, sensor_observation.sensor.pk)
+      
+        self.assertEqual(diffs[1].action, 'add')
+        self.assertEqual(diffs[1].model_name, 'modeldiff.SensorObservationModel')
+        self.assertEqual(diffs[1].model_id, sensor_observation.pk)
+             
+
+    def test_update_parent_field_geo_model(self):
+         
+        sensor = SensorGeoModel.objects.get(pk=1)
+        self.assertEqual(sensor.pk, 1)
+ 
+        sensor_observation = SensorObservationGeoModel.objects.create(sensor=sensor, value=16)
+   
+        diff = Geomodeldiff.objects.latest('id')
+        
+        self.assertEqual(diff.action, 'update')
+        self.assertEqual(diff.model_name, 'modeldiff.SensorGeoModel')
+        self.assertEqual(diff.model_id, sensor_observation.sensor.pk)
+     
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'add')
+        self.assertEqual(diff.model_name, 'modeldiff.SensorObservationGeoModel')
+        self.assertEqual(diff.model_id, sensor_observation.pk)
+               
+        
     def test_delete_model(self):
         person = PersonModel.objects.get(pk=1)
         self.assertEqual(person.pk, 1)
         person.delete()
-
-        diff = Geomodeldiff.objects.get(pk=2)
+  
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'delete')
+        self.assertEqual(diff.model_id, 1)
+        self.assertEqual(json.loads(diff.old_data),
+                         {u'name': u'Foo', u'surname': u'Doe'})
+        self.assertEqual(diff.new_data, '')
+         
+    def test_delete_geo_model(self):
+        person = PersonGeoModel.objects.get(pk=1)
+        self.assertEqual(person.pk, 1)
+        person.delete()
+   
+        diff = Geomodeldiff.objects.latest('id')
         self.assertEqual(diff.action, 'delete')
         self.assertEqual(diff.model_id, 1)
         self.assertEqual(json.loads(diff.old_data),
                          {u'name': u'Foo', u'surname': u'Doe',
                           u'the_geom': u'POINT(0.00000000 0.00000000)'})
         self.assertEqual(diff.new_data, '')
-
-    def test_set_to_none(self):
-        person = PersonModel.objects.get(pk=1)
-        self.assertEqual(person.pk, 1)
-        person.surname = None
-        person.the_geom = None
-        person.save()
-
-        diff = Geomodeldiff.objects.get(pk=2)
-        self.assertEqual(diff.action, 'update')
+ 
+    def test_delete_model_foreignkey(self):
+        sensor = SensorModel.objects.get(pk=1)
+        self.assertEqual(sensor.pk, 1)
+        sensor.delete()
+   
+        diff = Modeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'delete')
         self.assertEqual(diff.model_id, 1)
         self.assertEqual(json.loads(diff.old_data),
-                         {u'name': u'Foo', u'surname': u'Doe',
+                         {u'model_code': u'123ABC', u'type': 1
+                          })
+        self.assertEqual(diff.new_data, '')
+         
+    def test_delete_geo_model_foreignkey(self):
+        sensor = SensorGeoModel.objects.get(pk=1)
+        self.assertEqual(sensor.pk, 1)
+        sensor.delete()
+     
+        diff = Geomodeldiff.objects.latest('id')
+        self.assertEqual(diff.action, 'delete')
+        self.assertEqual(diff.model_id, 1)
+        self.assertEqual(json.loads(diff.old_data),
+                         {u'model_code': u'123ABC', u'type': 1,
                           u'the_geom': u'POINT(0.00000000 0.00000000)'})
-        self.assertEqual(json.loads(diff.new_data),
-                         {u'surname': None, u'the_geom': None})
+        self.assertEqual(diff.new_data, '')
+        
+
