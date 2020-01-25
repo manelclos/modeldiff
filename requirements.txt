@@ -1,2 +1,0 @@
-Django==1.6.6
-django-leaflet==0.22.0
